@@ -1,31 +1,31 @@
-# src/config.py
 
+# src/config/model_config.py
 import torch
 
 class Config:
-    # Model architecture
+    # model
     vocab_size = 8000
     max_seq_len = 128
-    embed_dim = 512
-    n_heads = 8
+    embed_dim = 384        # smaller for 8GB; you can bump to 512 if you have room
+    n_heads = 6
     n_layers = 6
-    ffn_dim = 2048
+    ffn_dim = 1536         # usually 4*embed_dim
     seq_len = 32
     dropout = 0.1
 
-    # Training parameters
-    batch_size = 32
-    num_epochs = 40
+    # training
+    batch_size = 8         # keep small on CPU
+    num_epochs = 20
     learning_rate = 3e-4
+    grad_clip = 1.0
 
-    # File paths
-    DATA_PATH = "data/samples/corpus.txt" 
-    MODEL_PATH = "models/checkpoints/model.pt"
-    # VOCAB_PATH = "data/vocab.txt"
-
-    # BPE tokenizer paths
-    TOKENIZER_PATH = "data/vocab.json"
+    # data / paths
+    DATA_PATH = "data/samples/corpus.txt"
+    TOKENIZER_PATH = "data/tokenizer.json"   # full tokenizer file (tokenizers json)
     MERGES_PATH = "data/merges.txt"
 
-    # Device setup
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    MODEL_PATH = "models/checkpoints/gpt_small.pt"
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+

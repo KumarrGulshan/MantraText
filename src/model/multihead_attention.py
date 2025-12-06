@@ -1,43 +1,56 @@
+# src/model/multihead_attention.py
 import torch
 import torch.nn as nn
 from src.model.attention import ScaledDotProductAttention
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads):
+    def __init__(self, embed_dim, num_heads, dropout=0.0):
         super().__init__()
-        assert embed_dim % num_heads == 0, "Embedding dim must be divisible by num_heads"
+        assert embed_dim % num_heads == 0
+        self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
 
-        self.q_linear = nn.Linear(embed_dim, embed_dim)
-        self.k_linear = nn.Linear(embed_dim, embed_dim)
-        self.v_linear = nn.Linear(embed_dim, embed_dim)
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
-        self.attention = ScaledDotProductAttention()
+        self.attn = ScaledDotProductAttention(dropout=dropout)
+        self.dropout = nn.Dropout(dropout)
 
-    def forward(self, query, key=None, value=None):
-        # If no key/value are provided, it's self-attention
-        if key is None and value is None:
-            key, value = query, query
+    def _split_heads(self, x):
+        # x: [batch, seq, embed_dim] -> [batch, heads, seq, head_dim]
+        b, t, _ = x.size()
+        x = x.view(b, t, self.num_heads, self.head_dim)
+        return x.transpose(1, 2)
 
-        batch_size = query.size(0)
+    def _combine_heads(self, x):
+        # x: [batch, heads, seq, head_dim] -> [batch, seq, embed_dim]
+        x = x.transpose(1, 2).contiguous()
+        b, t, _, _ = x.size()
+        return x.view(b, t, self.embed_dim)
 
-        # Linear projections
-        Q = self.q_linear(query)
-        K = self.k_linear(key)
-        V = self.v_linear(value)
+    def forward(self, x, mask=None):
+        """
+        x: [batch, seq, embed_dim]
+        mask: either None or shape [batch, seq, seq] (causal) or broadcastable to [batch, heads, seq, seq]
+        """
+        Q = self.q_proj(x)
+        K = self.k_proj(x)
+        V = self.v_proj(x)
 
-        # Split into heads
-        Q = Q.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        K = K.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        V = V.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        Q = self._split_heads(Q)
+        K = self._split_heads(K)
+        V = self._split_heads(V)
 
-        # Apply attention
-        out, attn = self.attention(Q, K, V)
+        # prepare mask: expand to [batch, heads, seq, seq]
+        if mask is not None:
+            if mask.dim() == 3:
+                mask = mask.unsqueeze(1)  # [batch, 1, seq, seq]
+            # otherwise assume already broadcastable
 
-        # Concatenate heads
-        out = out.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.head_dim)
-
-        # Final projection
+        out, attn = self.attn(Q, K, V, mask=mask)
+        out = self._combine_heads(out)
         out = self.out_proj(out)
+        out = self.dropout(out)
         return out, attn

@@ -1,114 +1,117 @@
-# src/training/train_loop.py
+# src/training/train.py
+import os
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torch.optim import AdamW
+from src.config.model_config import Config
+from src.model.gpt import GPT
+from src.model.utils import causal_mask
+from tokenizers import Tokenizer
+import math
 
-# import torch
-# import torch.nn as nn
-# import torch.optim as optim
-# from tqdm import tqdm
+# ---------------- Dataset ----------------
+class TextDataset(Dataset):
+    def __init__(self, token_ids, block_size):
+        self.data = token_ids
+        self.block_size = block_size
 
-# from src.data.dataset import create_dataloaders_from_corpus
-# from src.model.transformer_model import Transformer
-# from src.config.model_config import Config
+    def __len__(self):
+        return max(0, len(self.data) - self.block_size)
 
-# class Trainer:
-#     def __init__(self):
-#         print("📦 Loading dataset...")
-#         # Load tokenizer + dataloaders
-#         self.tokenizer, self.train_loader, self.val_loader = create_dataloaders_from_corpus(
-#             corpus_path=Config.DATA_PATH,
-#             vocab_path=Config.TOKENIZER_PATH,
-#             seq_len=Config.seq_len,
-#             batch_size=Config.batch_size,
-#             val_split=0.05,
-#         )
+    def __getitem__(self, idx):
+        x = self.data[idx: idx + self.block_size]
+        y = self.data[idx + 1: idx + 1 + self.block_size]
+        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
 
-#         print("🚀 Initializing model...")
-#         self.model = Transformer(
-#             vocab_size = self.tokenizer.tokenizer.get_vocab_size(),  # use tokenizer vocab size
-#             embed_dim=Config.embed_dim,
-#             num_heads=Config.n_heads,
-#             ff_dim=Config.ffn_dim,
-#             num_encoder_layers=Config.n_layers,
-#             num_decoder_layers=Config.n_layers,
-#             max_len=Config.max_seq_len,
-#         ).to(Config.device)
+def collate_fn(batch):
+    xs, ys = zip(*batch)
+    return torch.stack(xs), torch.stack(ys)
 
-#         self.optimizer = optim.Adam(self.model.parameters(), lr=Config.learning_rate)
-#         self.criterion = nn.CrossEntropyLoss()
-#         self.device = Config.device
-#         print(f"Trainer initialized. Using device: {self.device}\n")
+def load_tokenizer(path):
+    return Tokenizer.from_file(path)
 
-#     def train(self):
-#         print("🏋️ Starting training...")
-#         for epoch in range(Config.num_epochs):
-#             print(f"\n📅 Epoch {epoch+1}/{Config.num_epochs}")
-#             self.model.train()
-#             total_loss = 0
+def tokenize_file(tokenizer, file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        text = f.read()
+    return tokenizer.encode(text).ids
 
-#             for batch_idx, (x, y) in enumerate(tqdm(self.train_loader)):
-#                 x, y = x.to(self.device), y.to(self.device)
+# ---------------- Training ----------------
+def train():
+    cfg = Config
+    device = cfg.device
 
-#                 # Prepare decoder input: shift target by one with <bos> token
-#                 bos_id = self.tokenizer.tokenizer.token_to_id("<bos>")
-#                 if bos_id is None:
-#                  bos_id = 0
+    # ---- Load tokenizer and tokenize data ----
+    tokenizer = load_tokenizer(cfg.TOKENIZER_PATH)
+    token_ids = tokenize_file(tokenizer, cfg.DATA_PATH)
 
-#                 decoder_input = torch.zeros_like(y)
-#                 decoder_input[:, 1:] = y[:, :-1]
-#                 decoder_input[:, 0] = bos_id
+    # ---- Split train / validation ----
+    split_idx = int(0.9 * len(token_ids))
+    train_ids = token_ids[:split_idx]
+    val_ids = token_ids[split_idx:]
 
-#                 # Forward pass
-#                 logits = self.model(x, decoder_input)
-#                 logits = logits.view(-1, logits.size(-1))
-#                 y_flat = y.view(-1)
+    train_dataset = TextDataset(train_ids, cfg.max_seq_len)
+    val_dataset = TextDataset(val_ids, cfg.max_seq_len)
 
-#                 # Compute loss
-#                 loss = self.criterion(logits, y_flat)
-#                 total_loss += loss.item()
+    train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False, collate_fn=collate_fn)
 
-#                 # Backprop
-#                 self.optimizer.zero_grad()
-#                 loss.backward()
-#                 self.optimizer.step()
+    # ---- Initialize model ----
+    model = GPT(cfg).to(device)
+    optimizer = AdamW(model.parameters(), lr=cfg.learning_rate)
 
-#                 if batch_idx % 50 == 0:
-#                     print(f"Batch {batch_idx} | Loss: {loss.item():.4f}")
+    start_epoch = 0
+    # ---- Resume from checkpoint if exists ----
+    if os.path.exists(cfg.MODEL_PATH):
+        checkpoint = torch.load(cfg.MODEL_PATH, map_location=device)
+        model.load_state_dict(checkpoint)
+        print(f"Resumed model from {cfg.MODEL_PATH}")
 
-#             avg_train_loss = total_loss / len(self.train_loader)
-#             print(f"🔥 Epoch {epoch+1} Avg Train Loss: {avg_train_loss:.4f}")
+    model.train()
+    for epoch in range(start_epoch, cfg.num_epochs):
+        total_loss = 0.0
+        for step, (x_batch, y_batch) in enumerate(train_loader):
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
 
-#             # Validation
-#             val_loss = self.evaluate()
-#             print(f"💻 Validation Loss: {val_loss:.4f} | Perplexity: {torch.exp(torch.tensor(val_loss)):.2f}")
+            # causal mask
+            mask = causal_mask(x_batch.size(0), x_batch.size(1), device)
 
-#             # Save checkpoint
-#             checkpoint_path = f"{Config.MODEL_PATH}_epoch{epoch+1}.pt"
-#             torch.save(self.model.state_dict(), checkpoint_path)
-#             print(f"💾 Saved checkpoint: {checkpoint_path}")
+            logits, _ = model(x_batch, attention_mask=mask)
+            loss = torch.nn.functional.cross_entropy(logits.view(-1, cfg.vocab_size), y_batch.view(-1))
 
-#     def evaluate(self):
-#         self.model.eval()
-#         total_loss = 0
-#         with torch.no_grad():
-#             for x, y in self.val_loader:
-#                 x, y = x.to(self.device), y.to(self.device)
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
+            optimizer.step()
 
-#                 bos_id = self.tokenizer.token_to_id.get("<bos>"
-#                                                         )
-#                 decoder_input = torch.zeros_like(y)
-#                 decoder_input[:, 1:] = y[:, :-1]
-#                 decoder_input[:, 0] = bos_id
+            total_loss += loss.item()
+            if step % 50 == 0:
+                print(f"Epoch {epoch} Step {step} Train Loss: {loss.item():.4f}")
 
-#                 logits = self.model(x, decoder_input)
-#                 logits = logits.view(-1, logits.size(-1))
-#                 y_flat = y.view(-1)
+        avg_train_loss = total_loss / (step + 1)
+        train_ppl = math.exp(avg_train_loss)
+        print(f"Epoch {epoch} Average Train Loss: {avg_train_loss:.4f} | Train Perplexity: {train_ppl:.2f}")
 
-#                 loss = self.criterion(logits, y_flat)
-#                 total_loss += loss.item()
+        # ---- Validation ----
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for x_val, y_val in val_loader:
+                x_val = x_val.to(device)
+                y_val = y_val.to(device)
+                mask = causal_mask(x_val.size(0), x_val.size(1), device)
+                logits, _ = model(x_val, attention_mask=mask)
+                loss = torch.nn.functional.cross_entropy(logits.view(-1, cfg.vocab_size), y_val.view(-1))
+                val_loss += loss.item()
+        avg_val_loss = val_loss / len(val_loader)
+        val_ppl = math.exp(avg_val_loss)
+        print(f"Epoch {epoch} Validation Loss: {avg_val_loss:.4f} | Validation Perplexity: {val_ppl:.2f}")
+        model.train()
 
-#         avg_loss = total_loss / len(self.val_loader)
-#         return avg_loss
+        # ---- Save checkpoint ----
+        os.makedirs(os.path.dirname(cfg.MODEL_PATH), exist_ok=True)
+        torch.save(model.state_dict(), cfg.MODEL_PATH)
+        print(f"Saved checkpoint to {cfg.MODEL_PATH}")
 
-
-# if __name__ == "__main__":
-#     trainer = Trainer()
-#     trainer.train()
+if __name__ == "__main__":
+    train()

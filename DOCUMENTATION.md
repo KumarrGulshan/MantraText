@@ -1,6 +1,6 @@
-# Comprehensive Documentation: MindCore LLM Project
+# Comprehensive Documentation: MindCore GPT-style LLM Project
 
-This document provides a detailed overview of the MindCore project, which focuses on building a small-scale Large Language Model (LLM) from scratch using PyTorch. The goal is to provide an educational and functional implementation of the core Transformer architecture.
+This document provides a detailed overview of the MindCore project, which focuses on building a small-scale, GPT-style Large Language Model (LLM) from scratch using PyTorch. The goal is to provide an educational and functional implementation of the Transformer decoder-only architecture.
 
 ## 1. Project Structure
 
@@ -49,15 +49,14 @@ The project is organized into logical directories to separate model implementati
 
 ## 3. Model Architecture
 
-The LLM is based on the standard Transformer architecture, consisting of an Encoder and a Decoder stack, although it is primarily designed for sequence-to-sequence or decoder-only tasks depending on the specific implementation of `src/model/transformer_model.py`.
+The LLM is based on the GPT-style Transformer **decoder-only** architecture. This design is specialized for generative language tasks, where the model predicts the next token in a sequence based on all preceding tokens.
 
 Key components include:
 
-*   **`src/model/attention.py`**: Defines the basic Scaled Dot-Product Attention mechanism.
-*   **`src/model/multihead_attention.py`**: Implements the Multi-Head Attention layer.
-*   **`src/model/encoder_block.py` / `src/model/decoder_block.py`**: Defines the individual layers of the Transformer stack, including attention, residual connections, layer normalization, and feed-forward networks.
-*   **`src/model/transformer.py`**: Assembles the Encoder and Decoder stacks.
-*   **`src/model/transformer_model.py`**: The main model class, handling token embeddings, positional encoding, and the final linear layer for vocabulary prediction.
+*   **`src/model/attention.py`**: Defines the basic Scaled Dot-Product Attention mechanism, typically used with a causal mask for decoder-only models.
+*   **`src/model/multihead_attention.py`**: Implements the Multi-Head Attention layer. In a decoder-only setup, this layer applies masked self-attention.
+*   **`src/model/decoder_block.py`**: Defines the individual layers of the Transformer decoder stack, including masked multi-head self-attention, residual connections, layer normalization, and feed-forward networks.
+*   **`src/model/gpt.py`**: The main model class, assembling the stack of decoder blocks, handling token embeddings, positional encoding, and the final linear layer for vocabulary prediction.
 
 ## 4. Configuration
 

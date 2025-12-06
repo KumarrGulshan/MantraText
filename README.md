@@ -1,6 +1,6 @@
-# MindCore: LLM From Scratch Project
+# MindCore: GPT-style Large Language Model From Scratch
 
-This project implements a minimal Large Language Model (LLM) based on the Transformer architecture using PyTorch, primarily for educational and learning purposes.
+This project implements a minimal, GPT-style Large Language Model (LLM) based on the Transformer decoder-only architecture using PyTorch, primarily for educational and learning purposes.
 
 For comprehensive documentation on the architecture, configuration, and detailed usage, please refer to the [DOCUMENTATION.md](DOCUMENTATION.md) file.
 

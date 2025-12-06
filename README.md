@@ -1,4 +1,4 @@
-# MindCore: GPT-style Large Language Model From Scratch
+# MantraText: GPT-style Large Language Model From Scratch
 
 This project implements a minimal, GPT-style Large Language Model (LLM) based on the Transformer decoder-only architecture using PyTorch, primarily for educational and learning purposes.
 
@@ -9,7 +9,7 @@ For comprehensive documentation on the architecture, configuration, and detailed
 1.  **Clone the repository:**
     ```bash
     git clone <repository-url>
-    cd MindCore
+    cd MantraText
     ```
 
 2.  **Set up the environment:**

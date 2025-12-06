@@ -1,4 +1,4 @@
-# Comprehensive Documentation: MindCore GPT-style LLM Project
+# Comprehensive Documentation: MantraText GPT-style LLM Project
 
 This document provides a detailed overview of the MindCore project, which focuses on building a small-scale, GPT-style Large Language Model (LLM) from scratch using PyTorch. The goal is to provide an educational and functional implementation of the Transformer decoder-only architecture.
 
@@ -32,7 +32,7 @@ The project is organized into logical directories to separate model implementati
 1.  **Clone the repository:**
     ```bash
     git clone <repository-url>
-    cd MindCore
+    cd MantraText
     ```
 
 2.  **Set up the environment:**
